@@ -98,8 +98,8 @@ else:
             st.session_state.alarm_triggered = False
     
     col_metrics = st.columns(4)
-    with col_metrics[0]: st.metric(" Frames totales", st.session_state.total_frames)
-    with col_metrics[1]: st.metric(" Drowsy", st.session_state.drowsy_count)
+    with col_metrics[0]: st.metric("📊 Frames totales", st.session_state.total_frames)
+    with col_metrics[1]: st.metric("😴 Drowsy", st.session_state.drowsy_count)
     with col_metrics[2]: st.metric("😊 Non Drowsy", st.session_state.non_drowsy_count)
     with col_metrics[3]: st.metric("⚠️ Consecutivos", st.session_state.consecutive_drowsy)
     
@@ -117,15 +117,15 @@ else:
             if not cap.isOpened():
                 st.error("❌ No se pudo acceder a la cámara. Verifica permisos o si otra app la está usando.")
             else:
-                st.info("⏳ Cámara activa. Procesando frames...")
+                st.info("⏳ Cámara activa. Procesando frames continuamente...")
                 
                 start_time = time.time()
-                frame_count = 0
-                max_frames = 300
                 
-                while cap.isOpened() and frame_count < max_frames:
+                # BUCLE CONTINUO - Sin límite de frames
+                while run and cap.isOpened():
                     ret, frame = cap.read()
                     if not ret:
+                        st.error("❌ Error al capturar frame")
                         break
                     
                     faces = detect_faces(frame)
@@ -181,13 +181,13 @@ else:
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     frame_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
                     
-                    frame_count += 1
+                    # Control de velocidad (30 FPS)
                     time.sleep(0.033)
                 
                 cap.release()
-                st.success(f"✅ Cámara detenida. Se procesaron {frame_count} frames.")
+                st.success("✅ Cámara detenida.")
         else:
-            st.info("️ Haz clic en '▶️ Iniciar cámara' para comenzar")
+            st.info("📹 Haz clic en '▶️ Iniciar cámara' para comenzar")
             frame_placeholder.image(np.zeros((480, 640, 3), dtype=np.uint8), caption="Cámara detenida", use_container_width=True)
     
     with col_charts:
@@ -205,7 +205,7 @@ else:
         
         fig2 = go.Figure(data=[
             go.Bar(name='Drowsy 😴', x=['Detecciones'], y=[st.session_state.drowsy_count], marker_color='red'),
-            go.Bar(name='Non Drowsy ', x=['Detecciones'], y=[st.session_state.non_drowsy_count], marker_color='green')
+            go.Bar(name='Non Drowsy 😊', x=['Detecciones'], y=[st.session_state.non_drowsy_count], marker_color='green')
         ])
         fig2.update_layout(title="Distribución de Detecciones", barmode='group', height=300)
         st.plotly_chart(fig2, use_container_width=True)
