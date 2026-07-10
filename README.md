@@ -42,12 +42,20 @@ DriverDrowsinessProject/
     └── Dataset/            # Dataset de entrenamiento (Descargar por separado)
         ├── train/
         └── val/
-##⚙️ Instalación y Configuración
+```
+
+## ⚙️ Instalación y Configuración
+
 Sigue estos pasos para ejecutar el proyecto en tu máquina local:
-1. Clonar o descargar el repositorio
+
+### 1. Clonar o descargar el repositorio
+```bash
 git clone https://github.com/LUIS0709-eng/driver-drowsiness-detection.git
 cd driver-drowsiness-detection
-2. Crear y activar un entorno virtual (Recomendado)
+```
+
+### 2. Crear y activar un entorno virtual (Recomendado)
+```bash
 # En Windows
 python -m venv .venv
 .venv\Scripts\activate
@@ -55,36 +63,58 @@ python -m venv .venv
 # En Mac/Linux
 python3 -m venv .venv
 source .venv/bin/activate
-3. Instalar las dependencias
+```
+
+### 3. Instalar las dependencias
+```bash
 pip install -r requirements.txt
-4. Descargar el Modelo Entrenado
+```
+
+### 4. Descargar el Modelo Entrenado
 Por su peso, el modelo no está incluido en el repositorio.
-Descarga el archivo best.pt desde el siguiente enlace:
-👉 https://drive.google.com/file/d/1GpIsyYeMshf2-YH0aYuFFBkiudK3RNeo/view?usp=drive_link
-Coloca el archivo descargado dentro de la carpeta models/.
-5. Descargar el Dataset (Opcional)
-Si deseas reentrenar el modelo o probar con los datos originales, descarga el Driver Drowsiness Dataset (DDD) desde Kaggle:
+1. Descarga el archivo `best.pt` desde el siguiente enlace:
+   👉 [Descargar modelo desde Google Drive](https://drive.google.com/file/d/1GpIsyYeMshf2-YH0aYuFFBkiudK3RNeo/view?usp=drive_link)
+2. Coloca el archivo descargado dentro de la carpeta `models/`.
+
+### 5. Descargar el Dataset (Opcional)
+Si deseas reentrenar el modelo o probar con los datos originales, descarga el *Driver Drowsiness Dataset (DDD)* desde Kaggle:
 👉 https://www.kaggle.com/datasets/ismailnasri21/driver-drowsiness-dataset-ddd
-Extrae las carpetas train y val dentro de data/Dataset/.
-##🚀 Uso
+Extrae las carpetas `train` y `val` dentro de `data/Dataset/`.
+
+## 🚀 Uso
+
 Para iniciar la aplicación web, ejecuta el siguiente comando en la terminal:
+
+```bash
 streamlit run app.py
-Modos de operación:
-** Subir imagen:** Carga una foto (JPG, PNG) para analizar si el conductor está somnoliento.
-🎥 Cámara en tiempo real: Inicia tu webcam. El sistema dibujará un cuadro alrededor de tu rostro y mostrará las gráficas y estadísticas en vivo.
-Configuración de la Alarma:
+```
+
+Se abrirá automáticamente una pestaña en tu navegador (usualmente en `http://localhost:8501`).
+
+### Modos de operación:
+1. **📷 Subir imagen:** Carga una foto (JPG, PNG) para analizar si el conductor está somnoliento.
+2. **🎥 Cámara en tiempo real:** Inicia tu webcam. El sistema dibujará un cuadro alrededor de tu rostro y mostrará las gráficas y estadísticas en vivo.
+
+### Configuración de la Alarma:
 Desde el panel lateral (Sidebar), puedes:
-Ajustar el Umbral de confianza (0.5 a 1.0).
-Activar o desactivar la Alarma sonora.
-Configurar los Frames consecutivos necesarios para que salte la alarma (evita falsos positivos).
-##📊 Dataset y Entrenamiento
-El modelo fue entrenado utilizando el Driver Drowsiness Dataset (DDD), que contiene más de 41,000 imágenes de rostros de conductores en condiciones de alerta y somnolencia.
-Arquitectura: YOLO11m-cls
-Épocas: 79 (Early Stopping)
-Precisión (Top-1 Accuracy): 100% en el conjunto de validación.
-##👨‍💻 Autor
-Nombre: Luis Fernando Carrillo Morales
-Universidad / Institución: Universidad de Lima
-Correo de contacto: 20250607@aloe.ulima.edu.pe
-##📄 Licencia
+- Ajustar el **Umbral de confianza** (0.5 a 1.0).
+- Activar o desactivar la **Alarma sonora**.
+- Configurar los **Frames consecutivos** necesarios para que salte la alarma (evita falsos positivos).
+
+## 📊 Dataset y Entrenamiento
+
+El modelo fue entrenado utilizando el **Driver Drowsiness Dataset (DDD)**, que contiene más de 41,000 imágenes de rostros de conductores en condiciones de alerta y somnolencia.
+
+- **Arquitectura:** YOLO11m-cls
+- **Épocas:** 79 (Early Stopping)
+- **Precisión (Top-1 Accuracy):** 100% en el conjunto de validación.
+
+## 👨‍💻 Autor
+
+- **Nombre:** Luis Fernando Carrillo Morales
+- **Universidad / Institución:** Universidad de Lima
+- **Correo de contacto:** 20250607@aloe.ulima.edu.pe
+
+## 📄 Licencia
+
 Este proyecto fue desarrollado con fines académicos y educativos. El uso del modelo y el dataset está sujeto a sus respectivas licencias de origen.
