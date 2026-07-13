@@ -7,7 +7,14 @@ import winsound
 import plotly.graph_objects as go
 import pandas as pd
 import io
+import threading
 from predict import predict_image, predict_face, detect_faces
+
+# Función para reproducir la alarma en segundo plano sin bloquear el video
+def reproducir_alarma():
+    for _ in range(3):
+        winsound.Beep(1500, 100)  # Duración reducida a 100ms para ser más ágil
+        time.sleep(0.05)
 
 # Configuración de página
 st.set_page_config(page_title="Driver Drowsiness Detection", page_icon="🚗", layout="wide")
@@ -27,8 +34,8 @@ st.markdown("""
 st.markdown('<div class="main-header"><h1>🚗 Driver Drowsiness Detection</h1><p>Sistema de detección de somnolencia con YOLO11</p></div>', unsafe_allow_html=True)
 
 # Sidebar
-st.sidebar.header("⚙️ Configuración")
-mode = st.sidebar.radio("Modo de operación", [" Subir imagen", "🎥 Cámara en tiempo real"])
+st.sidebar.header("️ Configuración")
+mode = st.sidebar.radio("Modo de operación", ["📷 Subir imagen", "🎥 Cámara en tiempo real"])
 confidence_threshold = st.sidebar.slider("Umbral de confianza", 0.5, 1.0, 0.7, 0.05)
 alarm_enabled = st.sidebar.checkbox("🔊 Alarma sonora activada", value=True)
 alarm_threshold = st.sidebar.slider("Frames consecutivos para alarma", 5, 30, 15, 1)
@@ -42,7 +49,7 @@ if 'consecutive_drowsy' not in st.session_state: st.session_state.consecutive_dr
 if 'alarm_triggered' not in st.session_state: st.session_state.alarm_triggered = False
 
 # ==================== MODO IMAGEN ====================
-if mode == " Subir imagen":
+if mode == "📷 Subir imagen":
     col1, col2 = st.columns(2)
     with col1:
         uploaded_file = st.file_uploader("Selecciona una imagen", type=["jpg", "jpeg", "png"])
@@ -70,10 +77,10 @@ if mode == " Subir imagen":
                     if resultado == "Drowsy":
                         st.error(f"**Rostro {i+1}:** 😴 {resultado} ({probabilidad*100:.1f}%)")
                         if probabilidad >= confidence_threshold:
-                            st.markdown('<div class="status-alert">️ ALERTA: CONDUCTOR SOMNOLIENTO</div>', unsafe_allow_html=True)
+                            st.markdown('<div class="status-alert">⚠️ ALERTA: CONDUCTOR SOMNOLIENTO</div>', unsafe_allow_html=True)
                             if alarm_enabled: winsound.Beep(1000, 500)
                     else:
-                        st.success(f"**Rostro {i+1}:**  {resultado} ({probabilidad*100:.1f}%)")
+                        st.success(f"**Rostro {i+1}:** 😊 {resultado} ({probabilidad*100:.1f}%)")
 
 # ==================== MODO CÁMARA ====================
 else:
@@ -94,7 +101,7 @@ else:
                 del st.session_state.last_alarm_time
             st.rerun()
     with col_controls[2]:
-        if st.button("🔕 Silenciar alarma"): 
+        if st.button(" Silenciar alarma"): 
             st.session_state.alarm_triggered = False
     
     col_metrics = st.columns(4)
@@ -107,7 +114,7 @@ else:
     
     with col_video:
         if st.session_state.alarm_triggered:
-            st.markdown('<div class="alarm-active">🚨 ¡ALARMA ACTIVADA! CONDUCTOR SOMNOLIENTO</div>', unsafe_allow_html=True)
+            st.markdown('<div class="alarm-active"> ¡ALARMA ACTIVADA! CONDUCTOR SOMNOLIENTO</div>', unsafe_allow_html=True)
         
         frame_placeholder = st.empty()
         
@@ -117,78 +124,138 @@ else:
             if not cap.isOpened():
                 st.error("❌ No se pudo acceder a la cámara. Verifica permisos o si otra app la está usando.")
             else:
-                st.info(" Cámara activa. Procesando frames continuamente...")
+                st.info("⏳ Cámara activa. Procesando frames continuamente...")
                 
                 start_time = time.time()
                 frame_count = 0
-                frame_skip = 2  # Procesa la detección 1 de cada 3 frames (0, 1, 2)
+                base_frame_skip = 3  # Base: 1 de cada 4 frames
+                last_detection_time = 0
+                last_face_position = None  # Para tracking
+                prediction_buffer = []  # Buffer de últimas 5 predicciones
+                buffer_size = 5
+                prev_gray = None  # Para detección de movimiento
                 
-                # BUCLE CONTINUO OPTIMIZADO
+                # BUCLE CONTINUO CON TRACKING, BUFFER Y ALARMA EN HILO SEPARADO
                 while run and cap.isOpened():
                     ret, frame = cap.read()
                     if not ret:
                         st.error("❌ Error al capturar frame")
                         break
                     
-                    frame_count += 1
+                    # Reducir resolución para velocidad
+                    frame = cv2.resize(frame, (640, 480))
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                     
-                    # Solo hacemos la detección pesada en frames específicos
-                    if frame_count % frame_skip == 0:
-                        faces = detect_faces(frame)
-                        current_time = time.time() - start_time
+                    frame_count += 1
+                    current_time = time.time()
+                    
+                    # Detectar movimiento entre frames
+                    movement_detected = False
+                    if prev_gray is not None:
+                        diff = cv2.absdiff(prev_gray, gray)
+                        movement = np.sum(diff)
+                        if movement > 50000:  # Umbral de movimiento
+                            movement_detected = True
+                    
+                    prev_gray = gray.copy()
+                    
+                    # Frame skip adaptativo: detectar más si hay movimiento
+                    current_skip = 2 if movement_detected else base_frame_skip
+                    
+                    # Solo detectar en frames específicos
+                    if frame_count % current_skip == 0 and (current_time - last_detection_time) >= 0.15:
                         
-                        if len(faces) > 0:
-                            x, y, w, h = faces[0]
+                        # Usar tracking si hay posición previa y poco movimiento
+                        if last_face_position is not None and not movement_detected:
+                            x, y, w, h = last_face_position
+                            x = max(0, x - 10)
+                            y = max(0, y - 10)
+                            w = min(frame.shape[1] - x, w + 20)
+                            h = min(frame.shape[0] - y, h + 20)
                             face_crop = frame[y:y+h, x:x+w]
+                        else:
+                            # Detección completa de rostros
+                            faces = detect_faces(frame)
+                            if len(faces) > 0:
+                                x, y, w, h = faces[0]
+                                last_face_position = (x, y, w, h)
+                                face_crop = frame[y:y+h, x:x+w]
+                            else:
+                                last_face_position = None
+                                face_crop = None
+                        
+                        if face_crop is not None and face_crop.size > 0:
                             resultado, probabilidad = predict_face(face_crop)
                             
-                            color = (0, 0, 255) if resultado == "Drowsy" else (0, 255, 0)
+                            # Agregar al buffer de predicciones
+                            prediction_buffer.append({
+                                'result': resultado,
+                                'probability': probabilidad,
+                                'time': current_time
+                            })
+                            
+                            # Mantener solo las últimas N predicciones
+                            if len(prediction_buffer) > buffer_size:
+                                prediction_buffer.pop(0)
+                            
+                            # Calcular predicción suavizada
+                            if len(prediction_buffer) >= 3:
+                                avg_prob = np.mean([p['probability'] for p in prediction_buffer])
+                                results_list = [p['result'] for p in prediction_buffer]
+                                resultado_final = max(set(results_list), key=results_list.count)
+                                probabilidad_final = avg_prob
+                            else:
+                                resultado_final = resultado
+                                probabilidad_final = probabilidad
+                            
+                            # Dibujar en el frame
+                            color = (0, 0, 255) if resultado_final == "Drowsy" else (0, 255, 0)
                             cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
-                            label = f"{resultado} {probabilidad*100:.1f}%"
+                            label = f"{resultado_final} {probabilidad_final*100:.1f}%"
                             cv2.putText(frame, label, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
                             
                             st.session_state.total_frames += 1
                             
-                            if resultado == "Drowsy":
-                                st.session_state.drowsy_count += 1
-                                st.session_state.consecutive_drowsy += 1
-                                
-                                if st.session_state.consecutive_drowsy >= alarm_threshold:
-                                    if 'last_alarm_time' not in st.session_state:
-                                        st.session_state.last_alarm_time = 0
+                            # Actualizar estadísticas solo si la predicción es consistente
+                            if len(prediction_buffer) >= 3:
+                                if resultado_final == "Drowsy":
+                                    st.session_state.drowsy_count += 1
+                                    st.session_state.consecutive_drowsy += 1
                                     
-                                    current_alarm_time = time.time()
-                                    time_since_last = current_alarm_time - st.session_state.last_alarm_time
-                                    
-                                    if time_since_last >= 0.5:
-                                        if alarm_enabled:
-                                            for _ in range(3):
-                                                winsound.Beep(1500, 200)
-                                                time.sleep(0.05)
+                                    if st.session_state.consecutive_drowsy >= alarm_threshold:
+                                        if 'last_alarm_time' not in st.session_state:
+                                            st.session_state.last_alarm_time = 0
                                         
-                                        st.session_state.last_alarm_time = current_alarm_time
-                                        st.session_state.alarm_triggered = True
-                            else:
-                                st.session_state.non_drowsy_count += 1
-                                st.session_state.consecutive_drowsy = 0
-                                st.session_state.alarm_triggered = False
-                                if 'last_alarm_time' in st.session_state:
-                                    del st.session_state.last_alarm_time
-                            
-                            st.session_state.history.append({
-                                'time': round(current_time, 2),
-                                'result': resultado,
-                                'probability': round(probabilidad, 4)
-                            })
-                            if len(st.session_state.history) > 200:
-                                st.session_state.history = st.session_state.history[-200:]
+                                        alarm_current_time = time.time()
+                                        time_since_last = alarm_current_time - st.session_state.last_alarm_time
+                                        
+                                        if time_since_last >= 0.5:
+                                            if alarm_enabled:
+                                                # 🚀 MEJORA: La alarma suena en segundo plano sin congelar el video
+                                                threading.Thread(target=reproducir_alarma, daemon=True).start()
+                                            
+                                            st.session_state.last_alarm_time = alarm_current_time
+                                            st.session_state.alarm_triggered = True
+                                else:
+                                    st.session_state.non_drowsy_count += 1
+                                    st.session_state.consecutive_drowsy = 0
+                                    st.session_state.alarm_triggered = False
+                                    if 'last_alarm_time' in st.session_state:
+                                        del st.session_state.last_alarm_time
+                                
+                                st.session_state.history.append({
+                                    'time': round(current_time - start_time, 2),
+                                    'result': resultado_final,
+                                    'probability': round(probabilidad_final, 4)
+                                })
+                                if len(st.session_state.history) > 200:
+                                    st.session_state.history = st.session_state.history[-200:]
+                        
+                        last_detection_time = current_time
                     
-                    # Mostramos el video SIEMPRE para que se vea fluido
+                    # Mostrar el video SIEMPRE
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     frame_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
-                    
-                    # Reducimos el sleep para que el video fluya mejor
-                    time.sleep(0.02)
                 
                 cap.release()
                 st.success("✅ Cámara detenida.")
@@ -222,7 +289,7 @@ else:
         if st.session_state.history:
             df = pd.DataFrame(st.session_state.history)
             csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button(label=" Descargar Historial (CSV)", data=csv, file_name='historial_somnolencia.csv', mime='text/csv', use_container_width=True)
+            st.download_button(label="📄 Descargar Historial (CSV)", data=csv, file_name='historial_somnolencia.csv', mime='text/csv', use_container_width=True)
     with col_exp2:
         if st.session_state.history:
             html_buffer = io.StringIO()
